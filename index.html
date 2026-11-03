@@ -334,7 +334,7 @@ function flow(list, gapX, gapY, stagger){
 function initial(){
   const groups=[['t1','t11','t8','t5','t14','t16'],['t2','t18','t17'],['t9','t12','t10','t15','t13'],['t3','t4','t7','t6']];
   const list=groups.map((g,i)=>({id:'w'+(i+1), tabs:g, active:g[0], z:i+1}));
-  return flow(list, 130, 44, 18);
+  return flow(list, 130, 100, 18);
 }
 
 const MAG_ICON='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h3.2v6.2a1.8 1.8 0 0 0 3.6 0V2H13v6.2a5 5 0 0 1-10 0z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 2h3.2v2.4H3zM9.8 2H13v2.4H9.8z" fill="currentColor"/></svg>';
@@ -1006,7 +1006,9 @@ async function carryPlanningWindow(alt, num, label, release){
   const horiz=dr.left>=rr.right-1;
   const at=gap=>horiz?{x:rr.right+gap-dr.left, y:rr.top-dr.top}:{x:rr.left-dr.left, y:rr.bottom+gap-dr.top};
   const p0={x:g.left+g.width/2, y:g.top+g.height/2};
-  const far=at(Math.max(150, horiz?dr.left-rr.right:dr.top-rr.bottom)), near=at(96), snap=at(26);
+  // never carry the window away from its target first, whatever the layout
+  const cur=horiz?dr.left-rr.right:dr.top-rr.bottom;
+  const far=at(Math.min(cur,150)), near=at(Math.min(96,cur)), snap=at(26);
   caption(`${num} / ${label}`);
   if(!await cursorTo(p0,650)) return false;
   await sleep(180); if(alt) setKey('Alt');
