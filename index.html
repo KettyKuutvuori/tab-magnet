@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Tab Magnet: a browser interaction prototype where tabs and windows attract each other like magnets.">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Tab Magnet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a black archive-style page — small uppercase mono type, translucent grey pill controls,
+   and the desk of browser windows as the one large object, with bracketed meta lines around it. */
+:root{
+  color-scheme:dark;
+  --bg:#000000; --surface:#1c1c1c; --chrome:#2a2a2a; --pill:rgba(71,71,71,.5); --pill-solid:#2b2b2b; --tab-hover:#363636;
+  --ink:#e6e6e6; --muted:#9a9a9a; --faint:#3a3a3a; --line:#444444;
+  --field:#ededed; --field-soft:rgba(237,237,237,.1); --on-field:#000000; --toast-link:#ffffff;
+  --work:#6f8ea6; --research:#6c9890; --shopping:#a68f66; --video:#ad7264; --social:#a3768c; --mail:#7d9870;
+  --sans:"Geist", "Helvetica Neue", Arial, sans-serif;
+  --mono:"Geist Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --body:var(--mono); --display:var(--sans);
+  --spring:cubic-bezier(.22,1,.36,1);
+}
+html{background:var(--bg)}
+body{background:var(--bg); color:var(--ink); font:400 12px/1.4 var(--mono); -webkit-font-smoothing:antialiased}
+::selection{background:var(--ink); color:var(--bg)}
+a{color:inherit}
+.wrap{max-width:1360px; margin:0 auto; padding-block:14px 18px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px));
+  display:grid; gap:28px}
+
+/* top bar, like an archive nav: one pill group on the left, one action on the right */
+.top{display:flex; align-items:center; justify-content:space-between; gap:12px}
+.pills{display:flex; align-items:center; gap:2px; padding:3px; border-radius:8px; background:var(--pill); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px)}
+.pills a, .pills span, .pbtn{display:inline-flex; align-items:center; justify-content:center; height:24px; padding:0 14px; border-radius:6px;
+  font:400 11px/1 var(--mono); letter-spacing:.02em; text-transform:uppercase; color:var(--ink); text-decoration:none}
+.pills .on{background:var(--bg)}
+.pills a:hover{background:rgba(0,0,0,.35)}
+.pbtn{height:30px; border:0; cursor:pointer; background:var(--pill); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border-radius:8px}
+.pbtn:hover{background:var(--pill-solid)}
+.pbtn:disabled{opacity:.45; cursor:default}
+.acts{display:flex; gap:6px}
+.playlist{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:-12px}
+.playlist button{display:inline-flex; align-items:center; gap:8px; height:30px; padding:0 12px; border:0; border-radius:8px; cursor:pointer;
+  background:var(--pill); color:var(--muted); font:400 11px/1 var(--mono); text-transform:uppercase; letter-spacing:.02em;
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); transition:background .2s, color .2s}
+.playlist button span{color:var(--faint)}
+.playlist button:hover{background:var(--pill-solid); color:var(--ink)}
+.playlist .pl-all{background:var(--ink); color:var(--bg)}
+.playlist .pl-all:hover{background:#fff; color:var(--bg)}
+.pl-dd{position:relative}
+.playlist .pl-pick{min-width:240px; justify-content:space-between}
+.playlist .pl-pick .pl-label{display:inline-flex; gap:8px}
+.playlist .pl-pick .pl-label, .playlist .pl-pick .pl-label span{color:var(--ink)}
+.playlist .pl-pick .pl-label span{opacity:.5}
+.pl-list[hidden]{display:none}
+.playlist .pl-pick.on{background:var(--surface); color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
+.playlist .pl-pick.on .pl-label::after{content:""; align-self:center; width:6px; height:6px; border-radius:50%; background:var(--ink); animation:blink 1s ease-in-out infinite}
+.playlist .pl-pick[aria-expanded="true"] svg{transform:rotate(180deg)}
+.pl-list{position:absolute; left:0; top:calc(100% + 6px); z-index:10004; min-width:100%; box-sizing:border-box; display:grid; gap:2px; padding:4px;
+  background:rgba(38,38,38,.88); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border:1px solid rgba(255,255,255,.14); border-radius:8px; animation:menuIn .14s ease-out}
+.playlist .pl-list button{width:100%; height:32px; background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; color:var(--ink); border-radius:6px; white-space:nowrap}
+.playlist .pl-list button:hover{background:rgba(0,0,0,.45)}
+.playlist .pl-ch.seen{color:var(--ink)}
+.playlist .pl-ch.on{background:rgba(0,0,0,.45); color:var(--ink)}
+.playlist .pl-ch.on span{color:var(--ink)}
+.playlist .pl-ch.on::after{content:""; margin-left:auto; width:6px; height:6px; border-radius:50%; background:var(--ink)}
+@keyframes blink{50%{opacity:.25}}
+#wins{transition:opacity .22s}
+.mi.hot{background:rgba(0,0,0,.45)}
+#ghostCursor{position:fixed; left:0; top:0; z-index:10010; pointer-events:none; opacity:0; transition:opacity .25s; will-change:transform}
+#ghostCursor.show{opacity:1}
+#ghostCursor svg{display:block; filter:drop-shadow(0 2px 3px rgba(0,0,0,.6)); transition:transform .12s}
+#ghostCursor.down svg{transform:scale(.88)}
+#ghostCursor i{position:absolute; left:-7px; top:-7px; width:20px; height:20px; border-radius:50%; border:1.5px solid var(--ink); opacity:0; transform:scale(.4); transition:opacity .15s, transform .25s}
+#ghostCursor.down i{opacity:.8; transform:scale(1)}
+#ghostCursor b{position:absolute; left:20px; top:20px; font:400 10px/1 var(--mono); text-transform:uppercase; color:var(--ink);
+  background:var(--surface); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:3px 6px; opacity:0; transition:opacity .15s}
+#ghostCursor.shift b{opacity:1}
+#introCaption{position:absolute; left:12px; top:4px; z-index:9500; pointer-events:none; font:400 11px var(--mono); text-transform:uppercase; letter-spacing:.03em;
+  color:var(--ink); opacity:0; transform:translateY(-4px); transition:opacity .3s, transform .3s}
+#introCaption.show{opacity:1; transform:none}
+
+.intro{display:grid; gap:2px; padding-top:72px; font:400 12px/1.45 var(--mono); text-transform:uppercase; letter-spacing:.02em}
+.intro p{margin:0}
+.intro .dim{color:var(--muted)}
+.intro u{text-underline-offset:2px}
+.keys{display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:12px !important; color:var(--muted)}
+.keys span{display:inline-flex; align-items:center; gap:7px}
+.keys i{font-style:normal; color:var(--ink); margin-left:-2px}
+.keys kbd{display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-width:24px; height:22px; padding:0 7px;
+  border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; background:var(--surface); color:var(--ink); font:400 10.5px var(--mono); text-transform:uppercase}
+
+.btn{border:0; background:var(--pill); color:var(--ink); font:400 11px var(--mono); text-transform:uppercase; padding:7px 12px; border-radius:8px; cursor:pointer}
+button:focus-visible, a:focus-visible{outline:1px solid var(--ink); outline-offset:2px}
+
+.mag{flex:none; align-self:flex-end; width:26px; height:26px; margin:0 0 4px 4px; padding:0; display:grid; place-items:center;
+  border:0; border-radius:6px; background:transparent; color:var(--muted); cursor:pointer}
+.mag:hover{background:var(--tab-hover); color:var(--ink)}
+.mag[aria-expanded="true"]{background:var(--ink); color:var(--bg)}
+
+#menu{position:fixed; z-index:10003; width:300px; max-width:calc(100vw - 16px); max-height:calc(100vh - 16px); overflow:auto; box-sizing:border-box;
+  background:rgba(38,38,38,.82); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); color:var(--ink);
+  border:1px solid rgba(255,255,255,.14); border-radius:8px; padding:4px; font:400 13px var(--sans); text-transform:none; letter-spacing:0; animation:menuIn .14s ease-out}
+@keyframes menuIn{from{opacity:0; transform:translateY(-4px)}}
+.mh{font:400 11.5px var(--sans); letter-spacing:0; color:var(--muted); padding:9px 10px 4px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.msep{height:1px; background:rgba(255,255,255,.07); margin:4px 2px}
+.mi{display:flex; width:100%; align-items:center; gap:6px; border:0; background:transparent; color:var(--ink); padding:7px 10px 7px 4px; border-radius:6px; text-align:left; cursor:pointer; font:inherit; text-transform:inherit; letter-spacing:inherit}
+.mi:hover:not(:disabled), .mi:focus-visible{background:rgba(0,0,0,.45); outline:none}
+.mi:disabled{color:var(--muted); cursor:default; opacity:.55}
+.mi .ck{flex:none; width:16px; text-align:center; color:var(--ink)}
+.mi .mt{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.mi .sub{flex:none; color:var(--muted)}
+.mseg{display:flex; gap:2px; background:rgba(0,0,0,.35); border-radius:6px; padding:2px; margin:2px 6px 6px}
+.mseg button{flex:1; border:0; background:transparent; color:var(--muted); font:400 12px var(--sans); text-transform:none; padding:5px 4px; border-radius:4px; cursor:pointer}
+.mseg button[aria-pressed="true"]{background:var(--bg); color:var(--ink)}
+
+#layer{position:relative; overflow:hidden; min-height:560px; background:var(--bg)}
+#field{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:9000}
+
+.win{position:absolute; height:196px; display:flex; flex-direction:column; background:var(--surface);
+  border:1px solid var(--line); border-radius:8px; box-shadow:0 24px 50px -24px rgba(0,0,0,.9)}
+.win.attract{border-color:var(--ink); box-shadow:0 0 0 calc(2px + var(--pull,0) * 10px) var(--field-soft)}
+.win.suggest{border-color:#555; border-style:dashed}
+.win.suggest .tab.kin{background:rgba(255,255,255,.07); color:var(--ink)}
+.win.attract.locked{outline:1px solid var(--ink); outline-offset:4px}
+.win.moving{box-shadow:0 34px 60px -20px rgba(0,0,0,1)}
+.win.enter{animation:pop .42s var(--spring)}
+@keyframes pop{from{opacity:0; transform:scale(.97)}}
+
+.chrome{display:flex; align-items:flex-end; height:40px; padding:6px 4px 0; background:var(--chrome); border-radius:7px 7px 0 0}
+.grip{flex:none; width:22px; height:34px; border:0; padding:0; cursor:grab; touch-action:none; border-radius:6px;
+  background:radial-gradient(var(--muted) 1px, transparent 1.4px) 5px 9px/6px 6px; background-repeat:repeat; opacity:.6;
+  -webkit-mask:linear-gradient(#000,#000) 5px 9px/12px 18px no-repeat; mask:linear-gradient(#000,#000) 5px 9px/12px 18px no-repeat}
+.drag-space{flex:none; width:26px; align-self:stretch; cursor:grab; touch-action:none}
+.tabs{flex:1; min-width:0; display:flex; gap:2px; height:34px}
+
+.tab{position:relative; flex:1 1 140px; min-width:28px; max-width:180px; height:34px; box-sizing:border-box;
+  display:flex; align-items:center; gap:7px; padding:0 6px 0 9px; border-radius:6px 6px 0 0;
+  color:var(--muted); font:400 10.5px var(--mono); text-transform:uppercase; letter-spacing:.02em;
+  cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none;
+  transition:transform .5s var(--spring), opacity .2s, background .15s, box-shadow .15s}
+.tab:hover{background:var(--tab-hover); color:var(--ink)}
+.tab.on{background:var(--surface); color:var(--ink)}
+.tab.kin{box-shadow:inset 0 -2px 0 var(--c)}
+.tab.lifting{display:none}
+.tab.ph{border:1px dashed var(--ink); background:var(--field-soft); color:var(--ink); cursor:default; animation:grow .22s var(--spring)}
+.tab.ph .fav{opacity:.8}
+@keyframes grow{from{opacity:0; transform:scaleX(.4)}}
+.tab.ph.still{animation:none}
+.win{transition:transform .5s var(--spring), box-shadow .18s, border-color .18s, width .22s ease-out, border-radius .45s var(--spring)}
+.win.moving{transition:box-shadow .18s, width .22s ease-out, border-radius .2s ease-out}
+.tab.enter{animation:pop .4s var(--spring)}
+.tab.pulse .fav{animation:pulse .6s ease-out}
+@keyframes pulse{40%{transform:scale(1.2)}}
+.fav{flex:none; width:14px; height:14px; border-radius:3px; background:var(--c); color:#000; font:500 9px/14px var(--mono); text-align:center; text-transform:none}
+.t{flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.x{flex:none; width:18px; height:18px; padding:0; border:0; border-radius:4px; background:transparent; color:inherit; cursor:pointer; font-size:14px; line-height:18px; display:none}
+.tab:hover .x, .tab.on .x{display:block; opacity:.6}
+.x:hover{background:var(--tab-hover); opacity:1}
+
+.bar{display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; border-bottom:1px solid var(--line)}
+.url{flex:1; min-width:0; font:400 11px var(--mono); background:var(--chrome); color:var(--muted); border-radius:6px; padding:4px 10px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.count{font:400 10.5px var(--mono); text-transform:uppercase; color:var(--muted); white-space:nowrap}
+.page{flex:1; min-height:0; padding:12px 14px; display:grid; align-content:start; gap:6px; overflow:hidden}
+.pg-kicker{font:400 10px var(--mono); letter-spacing:.04em; text-transform:uppercase; color:var(--c)}
+.pg-title{font:500 16px/1.2 var(--sans); letter-spacing:-.01em; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.pg-lines i{display:block; height:5px; border-radius:2px; background:var(--chrome); margin-top:7px}
+.pg-lines i:nth-child(2){width:80%} .pg-lines i:nth-child(3){width:58%}
+
+.ghost{position:fixed; left:0; top:0; z-index:10000; pointer-events:none; background:var(--surface); color:var(--ink);
+  border-radius:6px; box-shadow:0 0 0 1px #333, 0 18px 34px -12px rgba(0,0,0,.9);
+  transition:width .22s ease-out, border-radius .22s ease-out, box-shadow .2s; will-change:transform}
+.ghost.docking{border-radius:6px 6px 2px 2px; box-shadow:0 0 0 1px var(--ink), 0 12px 24px -12px rgba(0,0,0,.9)}
+.win.moving{will-change:transform, left, top}
+.melt{pointer-events:none}
+.melt .tabs{visibility:hidden}
+.win.morphing{overflow:hidden}
+.win.morphing::after{display:none}
+.chip{position:fixed; left:0; top:0; z-index:9990; pointer-events:none; display:flex; align-items:center; gap:6px;
+  max-width:170px; height:28px; padding:0 9px; border-radius:6px; background:var(--chrome); color:var(--ink);
+  font:400 10.5px var(--mono); text-transform:uppercase; box-shadow:0 0 0 1px #333, 0 12px 24px -12px rgba(0,0,0,.9); white-space:nowrap}
+.chip .t{overflow:hidden; text-overflow:ellipsis}
+.fly{position:fixed; z-index:9995; pointer-events:none; transition:transform .5s cubic-bezier(.5,0,.75,0), opacity .5s ease-in}
+#hint{position:fixed; left:0; top:0; z-index:10001; pointer-events:none; background:var(--ink); color:var(--bg);
+  font:400 10.5px var(--mono); text-transform:uppercase; letter-spacing:.03em; padding:6px 10px; border-radius:6px; white-space:nowrap}
+#hint.free{background:var(--pill); color:var(--ink); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px)}
+#toast{position:fixed; left:0; top:0; display:flex; align-items:center; gap:10px; opacity:0; pointer-events:none;
+  background:rgba(38,38,38,.85); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); color:var(--ink);
+  padding:4px 4px 4px 12px; border-radius:8px; font:400 11px var(--mono); text-transform:uppercase; letter-spacing:.02em; z-index:10002;
+  transition:opacity .2s, translate .25s var(--spring); translate:0 8px; max-width:calc(100vw - 32px)}
+#toast.show{opacity:1; translate:0 0; pointer-events:auto}
+#toast button{border:0; background:var(--bg); color:var(--toast-link); font:inherit; padding:6px 10px; border-radius:6px; cursor:pointer}
+#toast button:hover{background:#111}
+#toast button[hidden]{display:none}
+
+.notes{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:14px 22px; margin:0; padding:16px 0 0; border-top:1px solid var(--line)}
+.notes div{display:grid; gap:4px; align-content:start; min-width:0}
+.notes dt{font:400 11px var(--mono); text-transform:uppercase; letter-spacing:.03em; color:var(--ink)}
+.notes dt span{color:var(--muted)}
+.notes dd{margin:0; color:var(--muted); font:400 11.5px/1.45 var(--mono)}
+kbd{font:400 10.5px var(--mono); border-radius:4px; padding:1px 5px; background:var(--pill); color:var(--ink)}
+
+.about{display:grid; grid-template-columns:minmax(140px,220px) minmax(0,1fr); gap:16px 28px; padding-top:24px; border-top:1px solid var(--line)}
+.about h2{margin:0; font:400 11px var(--mono); text-transform:uppercase; letter-spacing:.03em; color:var(--ink)}
+.about dl{margin:0; display:grid; gap:16px; max-width:820px}
+.about dl div{display:grid; grid-template-columns:120px minmax(0,1fr); gap:4px 20px}
+.about dt{font:400 11px/1.6 var(--mono); text-transform:uppercase; letter-spacing:.03em; color:var(--muted)}
+.about dd{margin:0; font:400 14px/1.6 var(--sans); color:var(--ink); text-wrap:pretty}
+@media (max-width:720px){ .about{grid-template-columns:1fr} .about dl div{grid-template-columns:1fr} }
+.foot{display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px 24px; font:400 11px var(--mono); text-transform:uppercase; letter-spacing:.02em; color:var(--ink)}
+.foot .dim{color:var(--muted)}
+.stat{font-variant-numeric:tabular-nums}
+
+@media (max-width:640px){ .intro{padding-top:36px} }
+@media (prefers-reduced-motion: reduce){ .win, .tab{transition:none} .win.enter, .tab.enter{animation:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="top" aria-label="Prototype">
+    <div class="pills">
+      <span class="on" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M3 2h3.2v6.2a1.8 1.8 0 0 0 3.6 0V2H13v6.2a5 5 0 0 1-10 0z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 2h3.2v2.4H3zM9.8 2H13v2.4H9.8z" fill="currentColor"/></svg></span>
+      <a href="#layer">Prototype</a>
+      <a href="#notes">Notes</a>
+      <a href="#about">About</a>
+    </div>
+    <div class="acts"><button class="pbtn" id="reset" type="button">Reset demo</button></div>
+  </nav>
+
+  <header class="intro">
+    <h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Tab Magnet</h1>
+    <p>Tab Magnet. Tabs that attract.</p>
+    <p>Drag a window or a tab toward another window. <span class="dim">Similar tabs pull harder.</span></p>
+    <p class="keys">
+      <span><kbd aria-label="Magnet button"><svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h3.2v6.2a1.8 1.8 0 0 0 3.6 0V2H13v6.2a5 5 0 0 1-10 0z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 2h3.2v2.4H3zM9.8 2H13v2.4H9.8z" fill="currentColor"/></svg></kbd> Magnet menu</span>
+      <span><kbd>Right-click</kbd> Tab menu</span>
+      <span><kbd>Shift</kbd><i>+ drag</i> Bring similar</span>
+      <span><kbd>Alt</kbd><i>+ drag</i> Move freely</span>
+    </p>
+  </header>
+
+  <div class="playlist" id="playlist" role="toolbar" aria-label="Watch each behavior"></div>
+
+  <div id="layer"><div id="wins"></div><canvas id="field"></canvas></div>
+
+
+  <dl class="notes" id="notes">
+    <div><dt><span>01 /</span> Merge windows</dt><dd>Drag a window close; release to merge.</dd></div>
+    <div><dt><span>02 /</span> Bring similar</dt><dd><kbd>Shift</kbd>-drag a tab; its task follows.</dd></div>
+    <div><dt><span>03 /</span> Tab menu</dt><dd>Right-click a tab to gather its group.</dd></div>
+    <div><dt><span>04 /</span> Sort all</dt><dd>Magnet menu sorts every window. Undo reverts.</dd></div>
+    <div><dt><span>05 /</span> Duplicates</dt><dd>Magnet menu folds copies into one.</dd></div>
+    <div><dt><span>06 /</span> Move freely</dt><dd>Hold <kbd>Alt</kbd> to drag without snapping.</dd></div>
+  </dl>
+
+  <section class="about" id="about" aria-labelledby="about-h">
+    <h2 id="about-h">About the project</h2>
+    <dl>
+      <div><dt>Problem</dt><dd>People keep dozens of tabs open across several windows. Regrouping them takes many small clicks and long, precise drags, one tab at a time, so most people give up and the mess stays.</dd></div>
+      <div><dt>Idea</dt><dd>Treat tabs and windows like magnets. Bring one close to another and it is pulled in; let go and they snap together. Tabs that belong to the same task attract more strongly, so related work finds its way back together with less effort.</dd></div>
+      <div><dt>Explores</dt><dd>Whether nearness can replace exact drop targets. Whether one gesture can move a whole group, with Shift-drag collecting scattered tabs. And what a browser should count as similar: the same task, the same type of page, or the same site.</dd></div>
+      <div><dt>Related work</dt><dd>Vivaldi tab stacks and the tab groups in Firefox and Chrome group tabs by dropping one onto another, through menus, or with AI suggestions. Haiku OS snaps window tabs together by proximity. Tab Magnet adds merging whole windows by nearness and gathering scattered similar tabs in a single drag.</dd></div>
+      <div><dt>Status</dt><dd>Interactive prototype. In this demo each tab's task is set by hand; a real browser would infer it from where a tab was opened, what the page is about and how the person has grouped tabs before. Next step: a comparison test against ordinary drag and drop.</dd></div>
+    </dl>
+  </section>
+</div>
+<div id="toast" role="status" aria-live="polite"><span></span><button type="button">Undo</button></div>
+
+<script>
+const TASKS={tm:'Tab Magnet Project', q4:'Q4 Planning', desk:'Desk Setup', comms:'Inbox & Messages', focus:'Focus Music'};
+const CATS={work:'Work',research:'Research',shopping:'Shopping',video:'Video',social:'Social',mail:'Mail'};
+const T={};
+[
+ ['t1','Q4 roadmap','docs.google.com/document/d/q4-roadmap','work','D','q4'],
+ ['t2','Sprint 42 notes','notion.so/team/sprint-42','work','N','q4'],
+ ['t3','Tab magnet – explorations','figma.com/design/tab-magnet','work','F','tm'],
+ ['t4','TAB-214 Snap threshold bug','acme.atlassian.net/browse/TAB-214','work','J','tm'],
+ ['t5','Magnetism – Wikipedia','en.wikipedia.org/wiki/Magnetism','research','W','tm'],
+ ['t6','Why people keep 40 tabs open','dl.acm.org/doi/tab-overload-study','research','A','tm'],
+ ['t7',"Fitts's law – Wikipedia",'en.wikipedia.org/wiki/Fitts%27s_law','research','W','tm'],
+ ['t8','USB-C hub, 7-in-1','amazon.com/dp/usb-c-hub-7in1','shopping','a','desk'],
+ ['t9','MALM desk','ikea.com/p/malm-desk','shopping','I','desk'],
+ ['t10','Desk mats – results','amazon.com/s?k=desk+mat','shopping','a','desk'],
+ ['t11','Lofi beats to code to','youtube.com/watch?v=lofi-code','video','▶','focus'],
+ ['t12','Spring physics in UI','youtube.com/watch?v=ui-springs','video','▶','tm'],
+ ['t13','Lofi beats to code to','youtube.com/watch?v=lofi-code','video','▶','focus'],
+ ['t14','Inbox (12)','mail.google.com/mail/u/0/#inbox','mail','M','comms'],
+ ['t15','Inbox (12)','mail.google.com/mail/u/0/#inbox','mail','M','comms'],
+ ['t16','r/browsers','reddit.com/r/browsers','social','r','tm'],
+ ['t17','Messages | LinkedIn','linkedin.com/messaging','social','in','comms'],
+ ['t18','Calendar – Week 45','calendar.google.com/r/week','work','C','q4'],
+].forEach(([id,title,url,cat,fav,task])=>{const host=url.split('/')[0]; T[id]={id,title,url,cat,fav,task,host,site:host.split('.').slice(-2).join('.')};});
+
+const $=s=>document.querySelector(s);
+const layer=$('#layer'), winsEl=$('#wins'), canvas=$('#field'), ctx=canvas.getContext('2d');
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const WIN_H=196;
+let wins=[], history=[], zTop=10, uidN=100, mode='task', bring=false, range=120, drag=null;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const keyBy=(k,t)=>k==='task'?t.task:k==='cat'?t.cat:k==='site'?t.site:t.url;
+const keyOf=t=>keyBy(mode,t);
+const deskW=()=>layer.clientWidth;
+const snapDist=()=>Math.max(24, Math.round(range*.35));
+const BOOST=1.6;
+const kindLabel=()=>mode==='task'?'by task':mode==='cat'?'by type':mode==='site'?'by site':'by URL';
+function markKin(keys, excludeEl){
+  const res=new Map();
+  winsEl.querySelectorAll('.win').forEach(we=>{ if(we===excludeEl) return; let c=0;
+    we.querySelectorAll('.tab[data-tab]:not(.lifting)').forEach(te=>{ if(keys.has(keyOf(T[te.dataset.tab]))){ te.classList.add('kin'); c++; } });
+    if(c){ we.classList.add('suggest'); we.dataset.kin=c; we.dataset.kind=kindLabel(); res.set(we,c); } });
+  return res;
+}
+function kinSlot(we){ let last=-1; [...we.querySelectorAll('.tab[data-tab]:not(.lifting)')].forEach((el,i)=>{ if(el.classList.contains('kin')) last=i; }); return last<0?Infinity:last+1; }
+const winWidth=n=>Math.min(deskW()-16, 660, Math.max(280, 96*n+110));
+const getWin=id=>wins.find(w=>w.id===id);
+const plural=(n,w)=>`${n} ${w}${n!==1?'s':''}`;
+
+function flow(list, gapX, gapY, stagger){
+  let x=12, y=34; const W=deskW();
+  list.forEach((w,i)=>{
+    const ww=winWidth(w.tabs.length);
+    if(x>12 && x+ww>W-12){x=12; y+=WIN_H+gapY;}
+    w.x=x; w.y=y+(stagger&&i%2?stagger:0); x+=ww+gapX;
+  });
+  return list;
+}
+function initial(){
+  const groups=[['t1','t11','t8','t5','t14','t16'],['t2','t18','t17'],['t9','t12','t10','t15','t13'],['t3','t4','t7','t6']];
+  const list=groups.map((g,i)=>({id:'w'+(i+1), tabs:g, active:g[0], z:i+1}));
+  return flow(list, 130, 44, 18);
+}
+
+const MAG_ICON='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h3.2v6.2a1.8 1.8 0 0 0 3.6 0V2H13v6.2a5 5 0 0 1-10 0z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 2h3.2v2.4H3zM9.8 2H13v2.4H9.8z" fill="currentColor"/></svg>';
+const tabInner=t=>`<span class="fav">${esc(t.fav)}</span><span class="t">${esc(t.title)}</span>`;
+function tabHTML(id, w){
+  const t=T[id];
+  return `<div class="tab${w.active===id?' on':''}" data-tab="${id}" style="--c:var(--${t.cat})" title="${esc(t.title)}">${tabInner(t)}`+
+    `<button class="x" type="button" data-close aria-label="Close ${esc(t.title)}">×</button></div>`;
+}
+function winHTML(w){
+  const a=T[w.active]||T[w.tabs[0]];
+  return `<section class="win" data-win="${w.id}" style="left:${w.x}px;top:${w.y}px;width:${winWidth(w.tabs.length)}px;z-index:${w.z||1}">`+
+   `<div class="chrome"><button class="grip" type="button" data-grip aria-label="Move window"></button>`+
+   `<div class="tabs">${w.tabs.map(id=>tabHTML(id,w)).join('')}</div>`+
+   `<button class="mag" type="button" data-mag aria-label="Magnet options" aria-haspopup="menu" aria-expanded="false">${MAG_ICON}</button><div class="drag-space" data-grip></div></div>`+
+   `<div class="bar"><span class="url">${esc(a.url)}</span><span class="count">${plural(w.tabs.length,'tab')}</span></div>`+
+   `<div class="page" style="--c:var(--${a.cat})"><span class="pg-kicker">${CATS[a.cat]} · ${esc(a.host)}</span>`+
+   `<span class="pg-title">${esc(a.title)}</span><span class="pg-lines"><i></i><i></i><i></i></span></div></section>`;
+}
+
+function render(anim=true, overrides){
+  const tb=new Map(), wb=new Map(), was=new Map();
+  winsEl.querySelectorAll('.tab[data-tab]').forEach(e=>was.set(e.dataset.tab,e.closest('.win')?.dataset.win));
+  if(anim && !reduced){
+    winsEl.querySelectorAll('.tab[data-tab]').forEach(e=>tb.set(e.dataset.tab,e.getBoundingClientRect()));
+    winsEl.querySelectorAll('.win').forEach(e=>wb.set(e.dataset.win,e.getBoundingClientRect()));
+    if(overrides) overrides.forEach((r,k)=>tb.set(k,r));
+  }
+  wins.forEach(w=>{ if(!w.tabs.includes(w.active)) w.active=w.tabs[0]; });
+  winsEl.innerHTML=wins.map(winHTML).join('');
+  fit(); updateStat();
+  if(!anim || reduced) return;
+  winsEl.querySelectorAll('.win').forEach(we=>{
+    const a=we.getBoundingClientRect(), b=wb.get(we.dataset.win); let wdx=0, wdy=0;
+    if(b){ wdx=b.left-a.left; wdy=b.top-a.top; if(Math.abs(wdx)>.5||Math.abs(wdy)>.5){we.style.transition='none'; we.style.transform=`translate(${wdx}px,${wdy}px)`;} }
+    else we.classList.add('enter');
+    we.querySelectorAll('.tab').forEach(te=>{
+      const p=tb.get(te.dataset.tab); if(!p || !p.width){ if(b) te.classList.add('enter'); return; }
+      const r=te.getBoundingClientRect(), dx=p.left-r.left-wdx, dy=p.top-r.top-wdy;
+      if(Math.abs(dx)<1 && Math.abs(dy)<1) return;
+      te.style.transition='none'; te.style.transform=`translate(${dx}px,${dy}px)`; te.style.zIndex=5;
+    });
+  });
+  void winsEl.offsetWidth;
+  const slow=SLOW()>1, arrivals=[];
+  if(slow) wins.forEach(w=>w.tabs.forEach(id=>{ if(was.get(id)!==w.id) arrivals.push(id); }));
+  requestAnimationFrame(()=>winsEl.querySelectorAll('.win,.tab').forEach(e=>{
+    if(e.style.transform){ e.style.transition='';
+      if(slow){ const i=arrivals.indexOf(e.dataset.tab);
+        e.style.transitionDuration=e.classList.contains('tab')?'1.1s, .4s, .15s, .15s':'1.1s';
+        e.style.transitionDelay=i>0?(i*Math.min(.3,2.4/arrivals.length))+'s':'0s';
+        e.addEventListener('transitionend',()=>{e.style.transitionDuration=''; e.style.transitionDelay='';},{once:true}); }
+      e.style.transform='';
+      if(e.classList.contains('tab')) e.addEventListener('transitionend',()=>{e.style.zIndex='';},{once:true}); }
+  }));
+}
+function fit(){
+  const minH=deskW()<640?520:560; let maxB=0;
+  wins.forEach(w=>maxB=Math.max(maxB,w.y+WIN_H));
+  layer.style.height=Math.max(minH,maxB+28)+'px';
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=layer.clientWidth*dpr; canvas.height=layer.clientHeight*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function updateStat(){
+  const n=wins.reduce((s,w)=>s+w.tabs.length,0);
+  const st=$('#stat'); if(st) st.textContent=`${plural(wins.length,'window')} · ${n} tabs`;
+}
+function save(){ history.push(JSON.stringify(wins)); if(history.length>40) history.shift(); }
+function undo(){ if(!history.length) return; wins=JSON.parse(history.pop()); render(); toast('Undone'); }
+
+/* toast: anchored under the window that changed, with Undo beside the message */
+let toastT;
+function toast(msg, opts={}){
+  const t=$('#toast'); t.querySelector('span').textContent=msg; t.querySelector('button').hidden=!opts.undo;
+  t.classList.add('show');
+  const tw=t.offsetWidth, th=t.offsetHeight, vw=innerWidth, vh=innerHeight;
+  let x=(vw-tw)/2, y=vh-th-20;
+  if(opts.win){ const w=getWin(opts.win); if(w){ const o=lr(), ww=winWidth(w.tabs.length);
+    const ax=o.x+w.x+ww/2-tw/2, ay=o.y+w.y+WIN_H+10;
+    if(ay>8 && ay+th<vh-8){ x=ax; y=ay; } } }
+  x=Math.max(16,Math.min(x,vw-tw-16));
+  t.style.left=Math.round(x)+'px'; t.style.top=Math.round(y)+'px';
+  clearTimeout(toastT); toastT=setTimeout(hideToast, opts.undo?5000:2400);
+}
+function hideToast(){ $('#toast').classList.remove('show'); }
+$('#toast button').addEventListener('click',()=>{ hideToast(); undo(); });
+addEventListener('scroll',hideToast,{passive:true});
+
+/* ---------- geometry ---------- */
+const gapOf=(a,b)=>Math.hypot(Math.max(0,b.left-a.right,a.left-b.right), Math.max(0,b.top-a.bottom,a.top-b.bottom));
+const clampPt=(x,y,r)=>[Math.min(Math.max(x,r.left),r.right), Math.min(Math.max(y,r.top),r.bottom)];
+const lr=()=>{const r=layer.getBoundingClientRect(); return {x:r.left+layer.clientLeft, y:r.top+layer.clientTop};};
+
+/* ---------- hint ---------- */
+let hint=null;
+function showHint(text, x, y, free){
+  if(!hint){hint=document.createElement('div'); hint.id='hint'; document.body.appendChild(hint);}
+  hint.textContent=text; hint.classList.toggle('free',!!free);
+  const w=hint.offsetWidth, cx=Math.max(8,Math.min(x-w/2, innerWidth-w-8)), cy=Math.max(8,y);
+  hint.style.transform=`translate(${Math.round(cx)}px,${Math.round(cy)}px)`;
+}
+function setAttract(el,t,locked){
+  winsEl.querySelectorAll('.attract').forEach(e=>{ if(e!==el){e.classList.remove('attract','locked'); e.style.removeProperty('--pull');} });
+  if(el){ el.classList.add('attract'); el.classList.toggle('locked',!!locked); el.style.setProperty('--pull',t.toFixed(3)); }
+}
+
+/* ---------- incoming-tab preview: dashed placeholders inside the target strip ---------- */
+let preview=null;
+function flipStrip(strips, mutate){
+  strips=strips.filter(Boolean);
+  if(reduced||!strips.length){ mutate(); return; }
+  const before=new Map();
+  strips.forEach(st=>st.querySelectorAll('.tab[data-tab]').forEach(t=>before.set(t,t.getBoundingClientRect().left)));
+  mutate();
+  const moves=[];
+  before.forEach((x,t)=>{ if(!t.isConnected||t.classList.contains('lifting')) return;
+    t.style.transition='none'; t.style.transform='none';
+    const dx=x-t.getBoundingClientRect().left;
+    if(Math.abs(dx)<.5){ t.style.transform=''; t.style.transition=''; return; }
+    t.style.transform=`translateX(${dx}px)`; moves.push(t); });
+  if(!moves.length) return;
+  void document.body.offsetWidth;
+  moves.forEach(t=>{ t.style.transition='transform .2s cubic-bezier(.22,1,.36,1)'; t.style.transform='';
+    t.addEventListener('transitionend',()=>{ t.style.transition=''; },{once:true}); });
+}
+function setPreview(we, ids, idx, grow=true){
+  const key=we.dataset.win+'|'+idx+'|'+ids.length;
+  if(preview && preview.key===key) return;
+  const strip=we.querySelector('.tabs'), moved=preview&&preview.we===we;
+  flipStrip([strip, preview&&preview.we!==we?preview.we.querySelector('.tabs'):null], ()=>{
+    const keepWidth=moved?preview.orig:null;
+    if(preview){ preview.els.forEach(e=>e.remove()); if(!moved) preview.we.style.width=preview.orig; preview=null; }
+    const list=[...strip.querySelectorAll('.tab[data-tab]:not(.lifting)')];
+    const before=list[idx]||null;
+    const els=ids.map((id,i)=>{ const t=T[id], el=document.createElement('div');
+      el.className='tab ph'+(moved?' still':''); el.style.setProperty('--c',`var(--${t.cat})`); el.innerHTML=tabInner(t);
+      strip.insertBefore(el,before); return el; });
+    const orig=keepWidth!==null?keepWidth:we.style.width;
+    if(grow) we.style.width=winWidth(list.length+ids.length)+'px';
+    preview={key, we, els, orig};
+  });
+}
+function clearPreview(){
+  if(!preview) return;
+  const p=preview;
+  flipStrip([p.we.querySelector('.tabs')], ()=>{ p.els.forEach(e=>e.remove()); p.we.style.width=p.orig; });
+  preview=null;
+}
+function clearUI(){
+  hint?.remove(); hint=null; clearPreview();
+  winsEl.querySelectorAll('.attract').forEach(e=>{e.classList.remove('attract','locked'); e.style.removeProperty('--pull');});
+  winsEl.querySelectorAll('.suggest').forEach(e=>{e.classList.remove('suggest'); delete e.dataset.kin; delete e.dataset.kind;});
+  winsEl.querySelectorAll('.kin').forEach(e=>e.classList.remove('kin'));
+}
+
+/* ---------- liquid motion: the windows themselves stretch, round off and fuse ---------- */
+let settling=null;
+function spring(p,v,tx,ty,k){
+  if(reduced){ p.x=tx; p.y=ty; v.x=v.y=0; return; }
+  v.x=(tx-p.x)*k; v.y=(ty-p.y)*k;
+  if(Math.abs(tx-p.x)<.05 && Math.abs(ty-p.y)<.05){ p.x=tx; p.y=ty; v.x=v.y=0; return; }
+  p.x+=v.x; p.y+=v.y;
+}
+function squash(v, tiltMax, pull){
+  return '';
+  if(reduced) return '';
+  const s=Math.hypot(v.x,v.y), st=Math.min(.04,s*.002), a=Math.atan2(v.y,v.x);
+  const tilt=Math.max(-tiltMax,Math.min(tiltMax,v.x*tiltMax*.04));
+  let tf=`rotate(${tilt.toFixed(2)}deg) rotate(${a}rad) scale(${1+st},${1-st*.6}) rotate(${-a}rad)`;
+  if(pull) tf+=` rotate(${pull.a}rad) scale(${1+pull.s},${1-pull.s*.45}) rotate(${-pull.a}rad)`;
+  return tf;
+}
+function drawBridge(){ ctx.clearRect(0,0,layer.clientWidth,layer.clientHeight); }
+const OPP={r:'l',l:'r',t:'b',b:'t'};
+const FAR={r:'0% 50%',l:'100% 50%',b:'50% 0%',t:'50% 100%'};
+const NEAR={r:'100% 50%',l:'0% 50%',b:'50% 100%',t:'50% 0%'};
+/* stretch the side facing `side` outward by `ext` px (anchored on the far side) and round
+   its two corners into a droplet; k 0..1 is how far the shape has turned liquid */
+function morph(el, side, k, ext){
+  if(reduced) return '';
+  const W=el.offsetWidth, H=el.offsetHeight, hz=side==='r'||side==='l';
+  const sx=hz?1+ext/W:1-Math.min(.06,ext/H*.2), sy=hz?1-Math.min(.1,ext/W*.3):1+ext/H;
+  const b=12, rx=hz?b+k*Math.min(110,W*.3):b+k*(W/2-b), ry=hz?b+k*(H/2-b):b+k*Math.min(70,H*.35);
+  const c=[[b,b],[b,b],[b,b],[b,b]];
+  ({r:[1,2],l:[0,3],b:[2,3],t:[0,1]})[side].forEach(i=>c[i]=[rx,ry]);
+  el.classList.add('morphing');
+  el.style.borderRadius=`${c.map(v=>v[0].toFixed(1)+'px').join(' ')} / ${c.map(v=>v[1].toFixed(1)+'px').join(' ')}`;
+  el.style.transformOrigin=FAR[side];
+  return `scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+}
+function unmorph(el){ if(!el) return; el.style.transform=''; el.style.borderRadius=''; el.style.transformOrigin=''; el.classList.remove('morphing'); }
+function loop(){
+  if(!drag||!drag.started) return;
+  const d=drag;
+  if(d.kind==='win'){
+    spring(d.p,d.v,d.tx,d.ty,.3);
+    const el=d.el, W=el.offsetWidth, H=el.offsetHeight;
+    el.style.left=d.p.x+'px'; el.style.top=d.p.y+'px';
+    if(d.near){
+      const r=d.near.r, cur={left:d.p.x,top:d.p.y,right:d.p.x+W,bottom:d.p.y+H};
+      const gx=Math.max(r.left-cur.right,cur.left-r.right), gy=Math.max(r.top-cur.bottom,cur.top-r.bottom);
+      const side=gx>=gy?((r.left+r.right)>(cur.left+cur.right)?'r':'l'):((r.top+r.bottom)>(cur.top+cur.bottom)?'b':'t');
+      d.side=side;
+      el.style.transform=squash(d.v,.5);
+    } else {
+      el.style.transform=squash(d.v,.8);
+    }
+  } else {
+    if(d.gp){
+      spring(d.gp,d.gv,d.tgx,d.tgy,.38);
+      d.gx=d.gp.x; d.gy=d.gp.y;
+      let pull=null;
+      if(d.bt&&!d.bt.lock){ const gw=d.ghost.offsetWidth; pull={a:Math.atan2(d.bt.y-(d.gy+d.h/2), d.bt.x-(d.gx+gw/2)), s:d.bt.t*d.bt.t*.22}; }
+      d.ghost.style.transform=`translate(${d.gx}px,${d.gy}px) `+squash(d.gv,2.5,pull);
+    }
+    d.chips.forEach((c,i)=>{
+      const tx=d.gx+(i+1)*9, ty=d.gy+(i+1)*7, k=reduced?1:.2+.04*Math.max(0,4-i)/4;
+      const px=c.x, py=c.y; c.x+=(tx-c.x)*k; c.y+=(ty-c.y)*k;
+      c.el.style.transform=`translate(${c.x}px,${c.y}px) `+squash({x:c.x-px,y:c.y-py},2);
+    });
+  }
+  requestAnimationFrame(loop);
+}
+function settleLoop(){
+  const s=settling; if(!s) return;
+  if(!s.el.isConnected){ settling=null; return; }
+  spring(s.p,s.v,s.tx,s.ty,.3);
+  s.el.style.left=s.p.x+'px'; s.el.style.top=s.p.y+'px'; s.el.style.transform=squash(s.v,.8);
+  if(Math.hypot(s.v.x,s.v.y)<.05 && Math.hypot(s.tx-s.p.x,s.ty-s.p.y)<.3) return finishSettle();
+  requestAnimationFrame(settleLoop);
+}
+function finishSettle(){
+  const s=settling; if(!s) return; settling=null;
+  s.el.style.left=s.tx+'px'; s.el.style.top=s.ty+'px'; s.el.style.transform=''; s.el.classList.remove('moving');
+}
+/* the dropped window itself narrows into the edge it touches and is absorbed */
+function melt(el, side){
+  const hz=side==='r'||side==='l', st=el.style;
+  const a=el.animate([
+    {transform:st.transform||'none', transformOrigin:st.transformOrigin||'50% 50%', borderRadius:st.borderRadius||'12px', opacity:1},
+    {transform:`scale(${hz?.45:.8},${hz?.7:.45})`, transformOrigin:NEAR[side], borderRadius:'45%', opacity:.95, offset:.45},
+    {transform:`scale(${hz?.02:.5},${hz?.5:.02})`, transformOrigin:NEAR[side], borderRadius:'50%', opacity:0}
+  ],{duration:reduced?1:440*SLOW(), easing:'cubic-bezier(.45,0,.55,1)', fill:'forwards'});
+  a.onfinish=()=>el.remove();
+}
+function gulp(winId, side, amp){
+  if(reduced) return;
+  const te=winsEl.querySelector(`[data-win="${winId}"]`); if(!te) return;
+  const h=side==='r'||side==='l';
+  const sx=h?1+amp:1-amp*.6, sy=h?1-amp*.6:1+amp;
+  te.animate([{transform:'none'},{transform:`scale(${sx},${sy})`, offset:.4},{transform:'none'}],
+    {duration:620*SLOW(), delay:220*SLOW(), easing:'ease-out'});
+}
+
+/* ---------- pointer handling ---------- */
+winsEl.addEventListener('click',e=>{
+  const m=e.target.closest('[data-mag]');
+  if(m){ if(menu&&menu.anchorBtn===m){ closeMenu(); return; } winMenu(getWin(m.closest('.win').dataset.win), m); return; }
+  const x=e.target.closest('[data-close]'); if(!x) return;
+  const id=x.closest('.tab').dataset.tab, w=wins.find(w=>w.tabs.includes(id));
+  closeTabs([id],`Closed “${T[id].title}”`, w.id);
+});
+winsEl.addEventListener('pointerdown',e=>{
+  if(e.button>0 || e.target.closest('[data-close]')) return;
+  const we=e.target.closest('.win'); if(!we) return;
+  if(settling) finishSettle();
+  const w=getWin(we.dataset.win); w.z=++zTop; we.style.zIndex=w.z;
+  const tab=e.target.closest('.tab[data-tab]'), grip=e.target.closest('[data-grip]');
+  if(tab && w.tabs.length>1){ const r=tab.getBoundingClientRect();
+    drag={kind:'tab', id:tab.dataset.tab, src:w, el:tab, sx:e.clientX, sy:e.clientY, offX:e.clientX-r.left, offY:e.clientY-r.top, w:Math.max(r.width,150), h:r.height, started:false};
+  } else if(grip || tab){
+    // a window's only tab behaves like its handle, as in Chrome
+    drag={kind:'win', w, el:we, sx:e.clientX, sy:e.clientY, ox:w.x, oy:w.y, started:false, viaTab:!!tab};
+  } else return;
+  e.preventDefault();
+  if(tab){ const id=tab.dataset.tab, x0=e.clientX, y0=e.clientY;
+    drag.lp=setTimeout(()=>{ if(drag&&!drag.started){ detach(); drag=null; tabMenu(id,x0,y0); } },550); }
+  addEventListener('pointermove',onMove); addEventListener('pointerup',onUp); addEventListener('pointercancel',onCancel);
+});
+function onMove(e){
+  if(!drag) return;
+  if(!drag.started){ if(Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)<5) return; drag.started=true; document.body.classList.add('dragging'); clearTimeout(drag.lp); hideToast(); closeMenu();
+    if(drag.kind==='tab') beginTab(); else { drag.el.classList.add('moving'); drag.p={x:drag.w.x,y:drag.w.y}; drag.v={x:0,y:0}; drag.tx=drag.w.x; drag.ty=drag.w.y; drag.kin=markKin(new Set(drag.w.tabs.map(i=>keyOf(T[i]))), drag.el); }
+    requestAnimationFrame(loop); }
+  drag.kind==='tab'?moveTab(e):moveWin(e);
+}
+function detach(){ document.body.classList.remove('dragging'); removeEventListener('pointermove',onMove); removeEventListener('pointerup',onUp); removeEventListener('pointercancel',onCancel); }
+function onCancel(){ detach(); drawBridge(null); if(drag&&drag.kind==='tab'){drag.ghost?.remove(); drag.chips?.forEach(c=>c.el.remove());} drag=null; clearUI(); render(false); }
+function onUp(e){
+  detach(); const d=drag; clearTimeout(d.lp);
+  if(!d.started){ drag=null; if(d.kind==='tab' && d.src.active!==d.id){ d.src.active=d.id; render(false);} return; }
+  d.kind==='tab'?endTab(e):endWin(e);
+}
+
+/* window drag: outer ring pulls, inner snap zone merges */
+function moveWin(e){
+  const d=drag, el=d.el, rawX=d.ox+e.clientX-d.sx, rawY=d.oy+e.clientY-d.sy;
+  const W=el.offsetWidth, H=el.offsetHeight, dr={left:rawX,top:rawY,right:rawX+W,bottom:rawY+H};
+  let best=null, bs=Infinity;
+  if(!e.altKey) winsEl.querySelectorAll('.win').forEach(o=>{ if(o===el) return;
+    const r={left:o.offsetLeft,top:o.offsetTop,right:o.offsetLeft+o.offsetWidth,bottom:o.offsetTop+o.offsetHeight};
+    const kin=d.kin.get(o)||0, boost=kin?BOOST:1, rng=range*boost, g=gapOf(dr,r), cur=d.cur===o;
+    const sc=g/rng*(cur?.8:1);
+    if(g<rng*(cur?1.1:1) && sc<bs){bs=sc; best={o,r,g,rng,boost,kin};} });
+  let x=rawX, y=rawY; d.target=null; d.near=null;
+  const o=lr();
+  if(best){
+    const t=Math.max(0,1-best.g/best.rng), r=best.r, n=d.w.tabs.length, kin=best.kin;
+    const lock=best.g<=snapDist()*best.boost*(d.locked&&d.cur===best.o?1.35:1);
+    d.cur=best.o; d.locked=lock;
+    const vx=dr.right<r.left?r.left-dr.right:dr.left>r.right?r.right-dr.left:0;
+    const vy=dr.bottom<r.top?r.top-dr.bottom:dr.top>r.bottom?r.bottom-dr.top:0;
+    const k=.5*t*t; x+=vx*k; y+=vy*k;
+    d.near={o:best.o, r, t, lock}; setAttract(best.o,t,lock);
+    if(lock){ const idx=kinSlot(best.o); d.target={w:getWin(best.o.dataset.win), idx}; setPreview(best.o, d.w.tabs, idx, false);
+      showHint(`Release to add ${plural(n,'tab')}`, o.x+(r.left+r.right)/2, o.y+r.top-34); }
+    else { d.target=null; clearPreview(); showHint('Closer to snap · release to place nearby', o.x+(r.left+r.right)/2, o.y+r.top-34, true); }
+  } else { d.cur=null; d.locked=false; setAttract(null); clearPreview(); hint?.remove(); hint=null;
+    if(e.altKey) showHint('Moving freely', o.x+x+W/2, o.y+y-34, true); }
+  d.tx=x; d.ty=y;
+}
+function endWin(){
+  const d=drag; drag=null; clearUI(); drawBridge(null);
+  if(d.target){ save(); const n=d.w.tabs.length, tw=d.target.w;
+    const el=d.el, side=d.side||'r';
+    tw.tabs.splice(Math.min(d.target.idx,tw.tabs.length),0,...d.w.tabs); tw.z=++zTop;
+    wins=wins.filter(w=>w!==d.w); render();
+    el.classList.remove('moving','attract','locked','suggest'); el.classList.add('melt');
+    el.style.zIndex=tw.z; tw.z=++zTop; winsEl.querySelector(`[data-win="${tw.id}"]`).style.zIndex=tw.z;
+    winsEl.appendChild(el);
+    melt(el, side); gulp(tw.id, side, .012);
+    toast(`Snapped ${plural(n,'tab')} into this window`,{undo:true, win:tw.id}); return; }
+  d.w.x=Math.round(Math.min(Math.max(d.tx,0),deskW()-d.el.offsetWidth)); d.w.y=Math.round(Math.max(d.ty,0));
+  settling={el:d.el, p:d.p, v:d.v, tx:d.w.x, ty:d.w.y}; requestAnimationFrame(settleLoop); fit();
+}
+
+/* tab drag */
+function beginTab(){
+  const d=drag, t=T[d.id];
+  d.followers=[]; d.chips=[]; d.bringing=false;
+  flipStrip([d.el.parentElement], ()=>d.el.classList.add('lifting'));
+  const g=document.createElement('div'); g.className='tab on ghost'; g.style.cssText=`--c:var(--${t.cat});width:${d.w}px`;
+  g.innerHTML=tabInner(t); document.body.appendChild(g); d.ghost=g;
+  d.cache=null;
+  if(bring) addFollowers(d); else markDragKin(d);
+}
+function markDragKin(d){
+  winsEl.querySelectorAll('.suggest').forEach(e=>{e.classList.remove('suggest'); delete e.dataset.kin; delete e.dataset.kind;});
+  winsEl.querySelectorAll('.kin').forEach(e=>e.classList.remove('kin'));
+  d.kin=markKin(new Set([d.id,...d.followers].map(i=>keyOf(T[i]))), null);
+  d.kinTotal=[...d.kin.values()].reduce((a,b)=>a+b,0);
+}
+const followersFor=d=>{
+  const k=T[d.id].task, same=id=>T[id].task===k;
+  let home=null, most=1;
+  wins.forEach(w=>{ if(w===d.src) return; const c=w.tabs.filter(same).length; if(c>most){ most=c; home=w; } });
+  const out=[]; wins.forEach(w=>w!==home&&w.tabs.forEach(id=>{ if(id!==d.id && !d.followers.includes(id) && same(id)) out.push(id); }));
+  return out;
+};
+function addFollowers(d){
+  d.bringing=true;
+  const add=followersFor(d);
+  add.forEach(id=>{ const src=winsEl.querySelector(`[data-tab="${id}"]`);
+    const r=src.getBoundingClientRect(), c=document.createElement('div'), ft=T[id];
+    c.className='chip'; c.style.setProperty('--c',`var(--${ft.cat})`); c.innerHTML=tabInner(ft);
+    document.body.appendChild(c); c.style.transform=`translate(${r.left}px,${r.top}px)`;
+    d.chips.push({id, el:c, x:r.left, y:r.top}); });
+  const strips=[...new Set(add.map(id=>winsEl.querySelector(`[data-tab="${id}"]`).parentElement))];
+  flipStrip(strips, ()=>add.forEach(id=>winsEl.querySelector(`[data-tab="${id}"]`).classList.add('lifting')));
+  d.followers.push(...add); clearPreview(); d.cache=null; markDragKin(d);
+}
+function slotItems(we){
+  return [...we.querySelectorAll('.tab[data-tab]:not(.lifting)')].map(el=>{const b=el.getBoundingClientRect(); return {mid:b.left+b.width/2, left:b.left, right:b.right, kin:el.classList.contains('kin')};});
+}
+function moveTab(e){
+  const d=drag;
+  if(e.shiftKey && !d.bringing) addFollowers(d);
+  const px=e.clientX, py=e.clientY, ids=[d.id,...d.followers], n=ids.length;
+  if(d.bringN===undefined) d.bringN=followersFor(d).length;
+  const grp=TASKS[T[d.id].task];
+  const sfx=d.bringing?(d.followers.length?` · bringing ${d.followers.length} ${grp} tab${d.followers.length>1?'s':''}`:''):(d.bringN?` · Shift brings ${d.bringN} ${grp} tab${d.bringN>1?'s':''}`:'');
+  let gx=px-d.offX, gy=py-d.offY;
+  const gr={left:gx,top:gy,right:gx+d.w,bottom:gy+d.h}, pr={left:px,top:py,right:px,bottom:py};
+  let best=null, bs=Infinity;
+  winsEl.querySelectorAll('.win').forEach(we=>{ const r=we.querySelector('.chrome').getBoundingClientRect();
+    const kin=d.kin.get(we)||0, boost=kin?BOOST:1, rng=range*boost, g=Math.min(gapOf(gr,r), gapOf(pr,r)), cur=d.cur===we;
+    const sc=g/rng*(cur?.8:1);
+    if(g<rng*(cur?1.1:1) && sc<bs){bs=sc; best={we,r,g,rng,boost,kin};} });
+  d.target=null; d.bt=null; d.dock=null;
+  const o=lr();
+  if(best){
+    const t=Math.max(0,1-best.g/best.rng), r=best.r, kin=best.kin;
+    const lock=best.g<=snapDist()*best.boost*(d.locked&&d.cur===best.we?1.35:1);
+    d.cur=best.we; d.locked=lock;
+    setAttract(best.we,t,lock);
+    if(lock){
+      // cache slot midpoints for this window so placeholders don't make the index jitter
+      if(!d.cache||d.cache.we!==best.we){ clearPreview(); d.cache={we:best.we, items:slotItems(best.we)}; }
+      const items=d.cache.items;
+      let idx=items.findIndex(m=>px<m.mid); if(idx<0) idx=items.length;
+      const L=d.lastIdx;
+      if(L!=null && d.lastWe===best.we && idx!==L){ const m=idx>L?items[idx-1]?.mid:items[idx]?.mid; if(m!=null && Math.abs(px-m)<14) idx=L; }
+      d.lastIdx=idx; d.lastWe=best.we;
+      // near the similar tabs, the slot is pulled next to them
+      let kinSnap=false;
+      if(kin){ let L=Infinity, R=-Infinity, last=-1;
+        items.forEach((m,i)=>{ if(m.kin){ L=Math.min(L,m.left); R=Math.max(R,m.right); last=i; } });
+        if(px>=L-70 && px<=R+110){ idx=last+1; kinSnap=true; } }
+      setPreview(best.we, ids, idx);
+      const pb=preview.els[0].getBoundingClientRect();
+      gx+=(pb.left-gx)*.45; gy+=(pb.top-gy)*.45;
+      d.target={w:getWin(best.we.dataset.win), idx};
+      d.bt={x:pb.left+pb.width/2, y:pb.top+pb.height/2, wb:pb.height*.42, t, lock:true}; d.dock=pb.width;
+      showHint((n>1?`Release to snap ${n} tabs here`:'Release to snap here')+sfx, pb.left+pb.width/2, r.top-34);
+    } else {
+      if(d.cache){ clearPreview(); d.cache=null; }
+      const [qx,qy]=clampPt(px,py,r);
+      gx+=(qx-px)*t*t*.5; gy+=(qy-py)*t*t*.5;
+      d.bt={x:qx, y:qy, wb:5+7*t, t, lock:false};
+      showHint('Closer to snap · release for a new window'+sfx, qx, r.top-34, true);
+    }
+  } else {
+    d.cur=null; d.locked=false; setAttract(null); if(d.cache){ clearPreview(); d.cache=null; }
+    showHint((n>1?`Release to open ${n} tabs in a new window`:'Release to open in a new window')+sfx, gx+d.w/2, gy+d.h+10, true);
+  }
+  d.tgx=gx; d.tgy=gy; if(!d.gp){ d.gp={x:gx,y:gy}; d.gv={x:0,y:0}; d.gx=gx; d.gy=gy; }
+  d.ghost.style.width=(d.dock||d.w)+'px'; d.ghost.classList.toggle('docking',!!d.dock);
+}
+function endTab(){
+  const d=drag; drag=null;
+  const ids=[d.id,...d.followers], ov=new Map();
+  ov.set(d.id,d.ghost.getBoundingClientRect()); d.chips.forEach(c=>ov.set(c.id,c.el.getBoundingClientRect()));
+  d.ghost.remove(); d.chips.forEach(c=>c.el.remove()); clearUI();
+  save();
+  wins.forEach(w=>w.tabs=w.tabs.filter(i=>!ids.includes(i)));
+  let dest;
+  if(d.target){ dest=d.target.w; dest.tabs.splice(Math.min(d.target.idx,dest.tabs.length),0,...ids); dest.active=d.id; dest.z=++zTop; }
+  else { const o=lr(), ww=winWidth(ids.length);
+    dest={id:'w'+(++uidN), tabs:ids, active:d.id, z:++zTop,
+      x:Math.round(Math.min(Math.max(d.gx-o.x-30,0),deskW()-ww-4)), y:Math.round(Math.max(d.gy-o.y-8,0))};
+    wins.push(dest); }
+  wins=wins.filter(w=>w.tabs.length);
+  render(true,ov);
+  if(d.target) gulp(dest.id, 'b', .008);
+  const moved=d.target&&dest===d.src&&ids.length===1;
+  if(moved) return;
+  const what=ids.length>1?`${ids.length} similar tabs`:`“${T[d.id].title}”`;
+  toast(d.target?`Snapped ${what} into this window`:`Opened ${what} in a new window`,{undo:true, win:dest.id});
+}
+
+/* ---------- one-click snapping ---------- */
+function snapAll(kind){
+  if(kind==='url') return dedupe();
+  mode=kind; // the last way you sorted is also what counts as similar while dragging
+  save();
+  const order=[], map=new Map();
+  wins.forEach(w=>w.tabs.forEach(id=>{const k=keyBy(kind,T[id]); if(!map.has(k)){map.set(k,[]); order.push(k);} map.get(k).push(id);}));
+  let groups=order.map(k=>map.get(k)), loose=groups.filter(g=>g.length===1).flat();
+  groups=groups.filter(g=>g.length>1); if(loose.length) groups.push(loose);
+  const used=new Set();
+  const next=groups.map(ids=>{
+    let best=null, bc=0;
+    wins.forEach(w=>{ if(used.has(w.id)) return; const c=w.tabs.filter(i=>ids.includes(i)).length; if(c>bc){bc=c; best=w;} });
+    if(best) used.add(best.id);
+    return {id:best?best.id:'w'+(++uidN), tabs:ids, active:ids[0], z:++zTop};
+  });
+  wins=flow(next,18,22,0); render();
+  const label={task:'task',cat:'type',site:'site'}[kind];
+  toast(`Snapped tabs into ${wins.length} windows by ${label}`+(loose.length?` · ${loose.length} one-off tabs share a window`:''),{undo:true});
+}
+function dedupe(){
+  const seen=new Map(), removed=[];
+  wins.forEach(w=>w.tabs.forEach(id=>{const u=T[id].url; if(seen.has(u)) removed.push({id,kept:seen.get(u)}); else seen.set(u,id);}));
+  if(!removed.length){ toast('No duplicate tabs left'); return; }
+  save();
+  const ghosts=removed.map(r=>{const el=winsEl.querySelector(`[data-tab="${r.id}"]`), rect=el.getBoundingClientRect(), c=el.cloneNode(true);
+    c.classList.add('fly'); c.classList.remove('kin'); c.style.cssText+=`;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;background:var(--surface);border-radius:9px`;
+    return {...r, rect, c};});
+  const gone=new Set(removed.map(r=>r.id));
+  wins.forEach(w=>w.tabs=w.tabs.filter(i=>!gone.has(i))); wins=wins.filter(w=>w.tabs.length);
+  render();
+  ghosts.forEach(g=>{ document.body.appendChild(g.c);
+    const kept=winsEl.querySelector(`[data-tab="${g.kept}"]`);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ const k=kept.getBoundingClientRect();
+      g.c.style.transform=`translate(${k.left-g.rect.left}px,${k.top-g.rect.top}px) scale(.5)`; g.c.style.opacity='0'; }));
+    if(SLOW()>1) g.c.style.transitionDuration='1.2s';
+    setTimeout(()=>{ g.c.remove(); kept.classList.add('pulse'); },reduced?0:(SLOW()>1?1200:480));
+  });
+  toast(`Folded ${plural(removed.length,'duplicate tab')} into the first copy`,{undo:true});
+}
+
+/* ---------- similar highlighting ---------- */
+winsEl.addEventListener('pointerover',e=>{
+  if(drag&&drag.started) return;
+  const tab=e.target.closest('.tab[data-tab]');
+  winsEl.querySelectorAll('.kin').forEach(x=>x.classList.remove('kin'));
+  if(!tab||!bring) return; const k=keyOf(T[tab.dataset.tab]);
+  winsEl.querySelectorAll('.tab[data-tab]').forEach(x=>{ if(keyOf(T[x.dataset.tab])===k) x.classList.add('kin'); });
+});
+winsEl.addEventListener('pointerleave',()=>winsEl.querySelectorAll('.kin').forEach(x=>x.classList.remove('kin')));
+
+/* ---------- in-browser options: magnet button menu, tab context menu ---------- */
+const STRENGTH={Gentle:70, Normal:120, Strong:180};
+const kindText=(k,id)=>k==='task'?TASKS[T[id].task]:k==='cat'?CATS[T[id].cat]:T[id].site;
+function matches(kind,id){ const k=keyBy(kind,T[id]), out=[]; wins.forEach(w=>w.tabs.forEach(i=>{ if(i!==id && keyBy(kind,T[i])===k) out.push(i); })); return out; }
+function countDupes(){ const seen=new Set(); let n=0; wins.forEach(w=>w.tabs.forEach(i=>{ const u=T[i].url; if(seen.has(u)) n++; else seen.add(u); })); return n; }
+function findSpot(width){
+  const W=deskW(), rects=wins.map(w=>({left:w.x-20,top:w.y-20,right:w.x+winWidth(w.tabs.length)+20,bottom:w.y+WIN_H+20}));
+  let maxB=0; wins.forEach(w=>maxB=Math.max(maxB,w.y+WIN_H));
+  for(let y=14; y<=maxB-WIN_H; y+=24) for(let x=12; x+width<=W-12; x+=24){
+    const r={left:x,top:y,right:x+width,bottom:y+WIN_H};
+    if(!rects.some(o=>r.left<o.right&&r.right>o.left&&r.top<o.bottom&&r.bottom>o.top)) return {x,y}; }
+  return {x:12, y:maxB+28};
+}
+function gather(id,kind){
+  mode=kind;
+  const others=matches(kind,id); if(!others.length) return;
+  save(); const w=wins.find(w=>w.tabs.includes(id));
+  wins.forEach(x=>x.tabs=x.tabs.filter(i=>!others.includes(i)));
+  w.tabs.splice(w.tabs.indexOf(id)+1,0,...others); w.active=id; w.z=++zTop;
+  wins=wins.filter(x=>x.tabs.length); render();
+  toast(`Gathered ${plural(others.length,kindText(kind,id)+' tab')} here`,{undo:true, win:w.id});
+}
+function splitOut(id,kind){
+  const ids=[id,...matches(kind,id)]; save();
+  wins.forEach(x=>x.tabs=x.tabs.filter(i=>!ids.includes(i))); wins=wins.filter(x=>x.tabs.length);
+  const p=findSpot(winWidth(ids.length)), nw={id:'w'+(++uidN), tabs:ids, active:id, z:++zTop, x:p.x, y:p.y};
+  wins.push(nw); render();
+  toast(`Moved ${plural(ids.length,kindText(kind,id)+' tab')} to a new window`,{undo:true, win:nw.id});
+}
+function closeTabs(ids, msg, anchor){
+  save(); wins.forEach(w=>w.tabs=w.tabs.filter(i=>!ids.includes(i))); wins=wins.filter(w=>w.tabs.length);
+  render(); toast(msg,{undo:true, win:anchor&&getWin(anchor)?anchor:null});
+}
+
+let menu=null;
+function openMenu(x,y,build,anchorBtn,above){
+  closeMenu();
+  const el=document.createElement('div'); el.id='menu'; el.setAttribute('role','menu');
+  document.body.appendChild(el); menu={el,build,anchorBtn,x,y,above:above||0};
+  anchorBtn?.setAttribute('aria-expanded','true'); paintMenu();
+  el.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
+}
+function paintMenu(){
+  const el=menu.el; el.innerHTML='';
+  menu.build().forEach(it=>{
+    if(it.head){ const h=document.createElement('div'); h.className='mh'; h.textContent=it.head; el.appendChild(h); return; }
+    if(it.sep){ const s=document.createElement('div'); s.className='msep'; el.appendChild(s); return; }
+    if(it.seg){ const g=document.createElement('div'); g.className='mseg';
+      it.seg.forEach(o=>{ const b=document.createElement('button'); b.type='button'; b.textContent=o.text; b.setAttribute('aria-pressed',!!o.on);
+        b.addEventListener('click',()=>{ o.pick(); paintMenu(); }); g.appendChild(b); });
+      el.appendChild(g); return; }
+    const b=document.createElement('button'); b.type='button'; b.className='mi';
+    b.setAttribute('role',it.check!==undefined?'menuitemcheckbox':'menuitem');
+    if(it.check!==undefined) b.setAttribute('aria-checked',!!it.check);
+    b.innerHTML=`<span class="ck">${it.check?'✓':''}</span><span class="mt">${esc(it.text)}</span>${it.sub?`<span class="sub">${esc(it.sub)}</span>`:''}`;
+    b.disabled=!!it.disabled;
+    b.addEventListener('click',()=>{ if(it.keep){ it.run(); paintMenu(); } else { closeMenu(); it.run(); } });
+    el.appendChild(b);
+  });
+  const w=el.offsetWidth, h=el.offsetHeight;
+  let x=Math.max(8,Math.min(menu.x,innerWidth-w-8)), y=menu.y;
+  if(y+h>innerHeight-8) y=Math.max(8,menu.y-h-12-menu.above);
+  el.style.left=x+'px'; el.style.top=y+'px';
+}
+function closeMenu(){ if(!menu) return; menu.anchorBtn?.setAttribute('aria-expanded','false'); menu.el.remove(); menu=null; }
+addEventListener('pointerdown',e=>{ if(menu && !menu.el.contains(e.target) && !e.target.closest('[data-mag]')) closeMenu(); },true);
+addEventListener('keydown',e=>{ if(e.key==='Escape') closeMenu(); });
+addEventListener('scroll',()=>closeMenu(),{passive:true});
+
+function winMenu(w,btn){
+  const r=btn.getBoundingClientRect();
+  openMenu(r.right-300, r.bottom+6, ()=>{
+    const a=w.active, k=mode==='url'?'task':mode, n=matches(k,a).filter(i=>!w.tabs.includes(i)).length;
+    const items=[{text:`Gather ${kindText(k,a)} Tabs Here`, sub:n?`+${n}`:'all here', disabled:!n, run:()=>gather(a,k)}];
+    const dupes=countDupes();
+    items.push({sep:1},{head:'Organize Every Window'},
+      {text:'By Task', run:()=>snapAll('task')},
+      {text:'By Type', run:()=>snapAll('cat')},
+      {text:'By Site', run:()=>snapAll('site')},
+      {text:'Fold Duplicate Tabs', sub:dupes?String(dupes):'none', disabled:!dupes, run:dedupe},
+      {sep:1},{head:'While Dragging'},
+      {text:'Bring Similar Tabs Along', sub:'or hold Shift', check:bring, keep:1, run:()=>{bring=!bring;}});
+    return items;
+  }, btn, r.height);
+}
+function tabMenu(id,x,y){
+  openMenu(x,y,()=>{
+    const w=wins.find(w=>w.tabs.includes(id)); if(!w) return [];
+    const k=mode==='url'?'task':mode, n=matches(k,id).length, label=kindText(k,id);
+    const items=[
+      {text:`Gather ${label} Tabs Here`, sub:n?`+${n}`:'none', disabled:!n, run:()=>gather(id,k)},
+      {text:`Move ${label} Tabs to New Window`, sub:String(n+1), disabled:w.tabs.length===1&&!n, run:()=>splitOut(id,k)}];
+    const d=matches('url',id);
+    items.push({sep:1},
+      {text:'Close Duplicates of This Tab', sub:d.length?String(d.length):'none', disabled:!d.length,
+        run:()=>closeTabs(d,`Closed ${plural(d.length,'duplicate')}`, w.id)},
+      {text:'Close Tab', run:()=>closeTabs([id],`Closed “${T[id].title}”`, w.id)});
+    return items;
+  });
+}
+winsEl.addEventListener('contextmenu',e=>{
+  const t=e.target.closest('.tab[data-tab]'); if(!t) return;
+  e.preventDefault(); if(drag){ detach(); clearTimeout(drag.lp); drag=null; }
+  tabMenu(t.dataset.tab,e.clientX,e.clientY);
+});
+
+/* ---------- playlist: a ghost cursor performs each behavior for real ---------- */
+let intro={running:false, abort:false, dragging:false, done:Promise.resolve()};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const SLOW=()=>intro.running?2.4:1;
+let cursorEl=null, captionEl=null;
+function ensureCursor(){
+  if(!cursorEl){ cursorEl=document.createElement('div'); cursorEl.id='ghostCursor'; cursorEl.setAttribute('aria-hidden','true');
+    cursorEl.innerHTML='<i></i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M3 2l14.5 9.2-6.4 1.3 3.7 6.9-2.6 1.4-3.7-6.9L3.8 18z" fill="#fff" stroke="#000" stroke-width="1.3" stroke-linejoin="round"/></svg><b>Shift</b>';
+    document.body.appendChild(cursorEl); }
+  return cursorEl;
+}
+const setKey=label=>{ cursorEl.querySelector('b').textContent=label||''; cursorEl.classList.toggle('shift',!!label); };
+function caption(text){
+  if(!captionEl){ captionEl=document.createElement('div'); captionEl.id='introCaption'; captionEl.setAttribute('role','status'); layer.appendChild(captionEl); }
+  captionEl.textContent=text||''; captionEl.classList.toggle('show',!!text);
+}
+const moveCursor=(x,y)=>{ cursorEl.style.transform=`translate(${x-3}px,${y-2}px)`; };
+function fire(type,x,y,target,shift,alt){
+  const ev=new PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:77,pointerType:'mouse',button:0,buttons:type==='pointerup'?0:1,shiftKey:!!shift,altKey:!!alt});
+  (target||window).dispatchEvent(ev);
+}
+function tween(from,to,ms,step,ease){
+  const t0=performance.now();
+  return new Promise(res=>{ (function f(now){
+    if(intro.abort) return res(false);
+    const k=Math.min(1,(now-t0)/ms), e=ease==='out'?1-Math.pow(1-k,3):k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+    step(from.x+(to.x-from.x)*e, from.y+(to.y-from.y)*e+Math.sin(k*Math.PI)*(to.arc||0));
+    k<1?requestAnimationFrame(f):res(true);
+  })(t0); });
+}
+const inView=r=>r.top>=0 && r.bottom<=innerHeight && r.left>=0 && r.right<=innerWidth;
+const winOf=tabId=>winsEl.querySelector(`[data-tab="${tabId}"]`)?.closest('.win');
+const center=el=>{ const r=el.getBoundingClientRect(); return {x:r.left+Math.min(r.width/2,70), y:r.top+r.height/2}; };
+const curPos=()=>{ const m=cursorEl.style.transform.match(/-?[\d.]+/g); return m?{x:+m[0]+3, y:+m[1]+2}:null; };
+async function cursorTo(p,ms=700){
+  let from=cursorEl.classList.contains('show')&&curPos();
+  if(!from){ from={x:p.x+70,y:p.y+80}; moveCursor(from.x,from.y); cursorEl.classList.add('show'); await sleep(150); }
+  return tween(from,p,ms,moveCursor);
+}
+async function press(el){ cursorEl.classList.add('down'); await sleep(170); cursorEl.classList.remove('down'); if(!intro.abort) el.click(); }
+async function ensureVisible(...els){
+  if(els.every(e=>e&&inView(e.getBoundingClientRect()))) return true;
+  cursorEl.classList.remove('show');
+  (els[1]||els[0]).scrollIntoView({behavior:reduced?'auto':'smooth', block:'center'}); await sleep(reduced?60:650);
+  return !intro.abort;
+}
+async function hold(x,y,ms,shift,alt){ const n=Math.round(ms/30);
+  for(let i=0;i<n;i++){ if(intro.abort) return false; moveCursor(x,y); fire('pointermove',x,y,null,shift,alt); await sleep(30); } return true; }
+const menuItem=re=>[...document.querySelectorAll('#menu .mi')].find(b=>re.test(b.textContent));
+async function pick(re,ms=650){
+  const it=menuItem(re); if(!it) return null;
+  if(!await cursorTo(center(it),600)) return false;
+  it.classList.add('hot'); await sleep(ms); if(intro.abort) return false;
+  await press(it); return true;
+}
+
+/* window drag along a path toward the Q4 window; alt = move freely */
+async function carryPlanningWindow(alt, num, label, release){
+  const D=winOf('t2'), R=winOf('t1'); if(!D||!R) return true;
+  if(!await ensureVisible(R,D)) return false;
+  const g=D.querySelector('.grip').getBoundingClientRect(), dr=D.getBoundingClientRect(), rr=R.getBoundingClientRect();
+  const horiz=dr.left>=rr.right-1;
+  const at=gap=>horiz?{x:rr.right+gap-dr.left, y:rr.top-dr.top}:{x:rr.left-dr.left, y:rr.bottom+gap-dr.top};
+  const p0={x:g.left+g.width/2, y:g.top+g.height/2};
+  const far=at(Math.max(150, horiz?dr.left-rr.right:dr.top-rr.bottom)), near=at(96), snap=at(26);
+  caption(`${num} / ${label}`);
+  if(!await cursorTo(p0,650)) return false;
+  await sleep(180); if(alt) setKey('Alt');
+  cursorEl.classList.add('down'); intro.dragging=true; fire('pointerdown',p0.x,p0.y,D.querySelector('.grip'),false,alt);
+  const P=o=>({x:p0.x+o.x, y:p0.y+o.y}), mv=(x,y)=>{ moveCursor(x,y); fire('pointermove',x,y,null,false,alt); };
+  if(!await tween(p0,P(far),500,mv)) return false;
+  if(!await tween(P(far),P(near),1100,mv,'out')) return false;
+  if(!await hold(P(near).x,P(near).y,450,false,alt)) return false;
+  if(!await tween(P(near),P(snap),700,mv,'out')) return false;
+  if(!await hold(P(snap).x,P(snap).y,1500,false,alt)) return false;
+  caption(`${num} / ${release}`);
+  fire('pointerup',P(snap).x,P(snap).y,null,false,alt); intro.dragging=false; cursorEl.classList.remove('down'); setKey('');
+  await sleep(2600); return !intro.abort;
+}
+const windowMagnet=()=>carryPlanningWindow(false,'01','Windows attract, then merge','Release: the window melts in and its tabs join');
+const altMove=()=>carryPlanningWindow(true,'06','Hold Alt to move a window without snapping','Release: it parks beside the other window, no merge');
+
+/* shift-drag one project tab; its scattered siblings leave their windows and come along */
+async function bringSimilar(){
+  const src=winsEl.querySelector('[data-tab="t12"]'), home=winOf('t3'); if(!src||!home) return true;
+  if(!await ensureVisible(src.closest('.win'),home)) return false;
+  const sr=src.getBoundingClientRect(), strip=home.querySelector('.tabs').getBoundingClientRect();
+  if(!inView(sr)||!inView(home.getBoundingClientRect())) return true;
+  caption('02 / Shift-drag pulls similar tabs out of every window');
+  const a={x:sr.left+Math.min(sr.width*.5,60), y:sr.top+sr.height*.55};
+  if(!await cursorTo(a,800)) return false;
+  await sleep(160); setKey('Shift'); cursorEl.classList.add('down'); intro.dragging=true; fire('pointerdown',a.x,a.y,src);
+  const sw=src.closest('.win').getBoundingClientRect();
+  const lift=sw.right+190<innerWidth?{x:sw.right+120, y:sw.top+70, arc:-30}:{x:sw.left+sw.width*.5, y:Math.min(innerHeight-40, sw.bottom+70), arc:0};
+  const mv=(x,y)=>{ moveCursor(x,y); fire('pointermove',x,y,null,true); };
+  if(!await tween(a,lift,800,mv)) return false;
+  if(!await hold(lift.x,lift.y,900,true)) return false;
+  const b={x:strip.right-16, y:strip.top+strip.height/2, arc:-30};
+  const via=(lift.x>sw.right && b.y>sw.bottom)?{x:lift.x, y:Math.min(b.y, innerHeight-30), arc:0}:null;
+  if(via && !await tween(lift,via,700,mv)) return false;
+  if(!await tween(via||lift,b,via?1000:1500,mv)) return false;
+  if(!await hold(b.x,b.y,1600,true)) return false;
+  caption('02 / Release: all three project tabs land together');
+  fire('pointerup',b.x,b.y); intro.dragging=false; cursorEl.classList.remove('down'); setKey('');
+  await sleep(3000); return !intro.abort;
+}
+/* right-click a tab, gather its group */
+async function gatherFromMenu(){
+  const tab=winsEl.querySelector('[data-tab="t14"]'); if(!tab) return true;
+  if(!await ensureVisible(tab.closest('.win'))) return false;
+  caption('03 / Right-click a tab to gather its group into this window');
+  const p=center(tab); if(!await cursorTo(p)) return false;
+  await sleep(200); cursorEl.classList.add('down'); await sleep(160); cursorEl.classList.remove('down');
+  if(intro.abort) return false;
+  tab.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:p.x,clientY:p.y}));
+  await sleep(900); if(intro.abort) return false;
+  caption('03 / The other inbox tabs fly in from their windows');
+  const ok=await pick(/^Gather/,700); if(ok===false) return false;
+  await sleep(3200); return !intro.abort;
+}
+/* magnet menu: sort everything by task, then undo it */
+async function sortThenUndo(){
+  const w=winOf('t1'), mag=w?.querySelector('.mag'); if(!mag) return true;
+  if(!await ensureVisible(w)) return false;
+  caption('04 / Sort every window by task in one click');
+  if(!await cursorTo(center(mag))) return false;
+  await press(mag); await sleep(800); if(intro.abort) return false;
+  const ok=await pick(/^By Task/,700); if(ok===false) return false;
+  await sleep(4200); if(intro.abort) return false;
+  const u=document.querySelector('#toast.show button:not([hidden])'); if(!u) return true;
+  caption('04 / Undo puts everything back');
+  if(!await cursorTo(center(u),800)) return false;
+  await sleep(400); await press(u);
+  await sleep(3000); return !intro.abort;
+}
+/* magnet menu: fold duplicates */
+async function foldDupes(){
+  const w=winOf('t1'), mag=w?.querySelector('.mag'); if(!mag) return true;
+  if(!await ensureVisible(w)) return false;
+  caption('05 / Fold duplicate tabs into their first copy');
+  if(!await cursorTo(center(mag))) return false;
+  await press(mag); await sleep(800); if(intro.abort) return false;
+  const ok=await pick(/^Fold Duplicate/,700); if(ok===false) return false;
+  await sleep(3000); return !intro.abort;
+}
+
+const CHAPTERS=[
+  {title:'Merge windows', run:windowMagnet},
+  {title:'Shift: bring similar', run:bringSimilar},
+  {title:'Gather from tab menu', run:gatherFromMenu},
+  {title:'Sort by task, undo', run:sortThenUndo},
+  {title:'Fold duplicates', run:foldDupes},
+  {title:'Alt: move freely', run:altMove},
+];
+const plEl=$('#playlist');
+const num=i=>String(i+1).padStart(2,'0');
+plEl.innerHTML=`<button type="button" class="pl-all" id="playAll">Play all</button>`+
+  `<div class="pl-dd"><button type="button" class="pl-pick" id="plPick" aria-haspopup="listbox" aria-expanded="false"><span class="pl-label">Watch a behavior</span><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>`+
+  `<div class="pl-list" id="plList" role="listbox" hidden>`+
+  CHAPTERS.map((c,i)=>`<button type="button" role="option" class="pl-ch" data-ch="${i}"><span>${num(i)}</span>${esc(c.title)}</button>`).join('')+
+  `</div></div>`;
+const plPick=$('#plPick'), plList=$('#plList');
+function setActive(i){
+  plEl.querySelectorAll('.pl-ch').forEach(b=>b.classList.toggle('on',+b.dataset.ch===i));
+  plPick.classList.toggle('on',i>=0);
+  plPick.querySelector('.pl-label').innerHTML=i>=0?`<span>${num(i)}</span>${esc(CHAPTERS[i].title)}`:'Watch a behavior';
+}
+function openList(open){ plList.hidden=!open; plPick.setAttribute('aria-expanded',String(open)); }
+addEventListener('pointerdown',e=>{ if(!plList.hidden && !e.target.closest('.pl-dd')) openList(false); },true);
+addEventListener('keydown',e=>{ if(e.key==='Escape') openList(false); });
+async function resetDesk(){
+  closeMenu(); hideToast(); history=[]; mode='task';
+  winsEl.style.opacity='0'; await sleep(reduced?0:220);
+  wins=initial(); render(false); winsEl.style.opacity='';
+  await sleep(reduced?0:350);
+}
+function endIntro(me){
+  if(intro!==me) return;
+  document.body.classList.remove('playing');
+  me.running=false; me.dragging=false; caption(''); setActive(-1);
+  if(cursorEl){ cursorEl.classList.remove('show','down'); setKey(''); }
+  $('#playAll').textContent='Play all';
+}
+async function play(list){
+  const prev=intro; if(prev.running){ prev.abort=true; if(prev.dragging&&drag) onCancel(); await prev.done; }
+  let finish; const me={running:true, abort:false, dragging:false}; me.done=new Promise(r=>finish=r);
+  intro=me; document.body.classList.add('playing'); ensureCursor();
+  $('#playAll').textContent=list.length>1?'Stop':'Play all';
+  try{
+    for(const i of list){
+      setActive(i); await resetDesk(); if(me.abort) break;
+      const ok=await CHAPTERS[i].run(); if(!ok||me.abort) break;
+      plEl.querySelector(`[data-ch="${i}"]`).classList.add('seen');
+      cursorEl.classList.remove('show'); caption(''); await sleep(500);
+    }
+  } finally { endIntro(me); finish(); }
+}
+plEl.addEventListener('click',e=>{
+  if(e.target.closest('#plPick')){ openList(plList.hidden); return; }
+  const all=e.target.closest('#playAll'), ch=e.target.closest('.pl-ch');
+  if(ch) openList(false);
+  if(all){ if(intro.running && $('#playAll').textContent==='Stop'){ intro.abort=true; if(intro.dragging&&drag) onCancel(); return; }
+    layer.scrollIntoView({behavior:reduced?'auto':'smooth', block:'start'}); play(CHAPTERS.map((_,i)=>i)); }
+  if(ch){ layer.scrollIntoView({behavior:reduced?'auto':'smooth', block:'start'}); play([+ch.dataset.ch]); }
+});
+let userTouched=false;
+addEventListener('pointerdown',e=>{ if(e.isTrusted && !e.target.closest?.('#playlist')) userTouched=true; },true);
+addEventListener('keydown',()=>{ userTouched=true; },true);
+// any real press on the page stops playback; a press during its drag cancels that drag first
+addEventListener('pointerdown',e=>{
+  if(!intro.running || !e.isTrusted || e.target.closest?.('#playlist')) return;
+  intro.abort=true;
+  if(intro.dragging && drag){ e.stopPropagation(); e.preventDefault(); onCancel(); }
+  if(cursorEl) cursorEl.classList.remove('show','down');
+},true);
+// play everything once, the first time the desk is mostly on screen
+if(!reduced && 'IntersectionObserver' in window){
+  const io=new IntersectionObserver(es=>{ if(es.some(x=>x.isIntersecting)){ io.disconnect(); setTimeout(()=>{ if(!userTouched && !intro.running) play(CHAPTERS.map((_,i)=>i)); },600); } },{threshold:.55});
+  io.observe(layer);
+}
+
+/* ---------- demo controls ---------- */
+$('#reset').addEventListener('click',()=>{ intro.abort=true; if(intro.dragging&&drag) onCancel(); history=[]; wins=initial(); render(); toast('Back to the messy start'); });
+addEventListener('keydown',e=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'&&!e.shiftKey&&history.length){ e.preventDefault(); undo(); } });
+let rt; addEventListener('resize',()=>{ closeMenu(); clearTimeout(rt); rt=setTimeout(()=>{ wins.forEach(w=>w.x=Math.max(0,Math.min(w.x,deskW()-winWidth(w.tabs.length)-4))); render(false); },120); });
+wins=initial(); render(false);
+</script>
+
+</body>
+</html>
